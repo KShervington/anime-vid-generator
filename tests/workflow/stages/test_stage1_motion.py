@@ -65,6 +65,7 @@ def test_organic_bus_dwpose_enables_hand_and_face_detection(builder_with_video):
     inputs = workflow[result.dwpose_output[0]]["inputs"]
     assert inputs["detect_hand"] is True
     assert inputs["detect_face"] is True
+    assert inputs["detect_body"] is True
 
 
 def test_organic_bus_output_refs_point_to_valid_nodes(builder_with_video):

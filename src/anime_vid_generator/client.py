@@ -1,6 +1,7 @@
 import json
 import uuid
 from typing import Any, AsyncIterator
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 import websockets
@@ -28,7 +29,9 @@ class ComfyUIClient:
 
     async def monitor_progress(self, prompt_id: str) -> AsyncIterator[dict[str, Any]]:
         """Yield WebSocket progress events until execution for prompt_id completes."""
-        ws_url = f"{self.base_url.replace('http', 'ws')}/ws?clientId={self.client_id}"
+        parsed = urlparse(self.base_url)
+        ws_scheme = "wss" if parsed.scheme == "https" else "ws"
+        ws_url = urlunparse(parsed._replace(scheme=ws_scheme)) + f"/ws?clientId={self.client_id}"
         async with websockets.connect(ws_url) as ws:
             async for raw in ws:
                 msg = json.loads(raw)
