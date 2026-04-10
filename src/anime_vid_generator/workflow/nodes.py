@@ -50,3 +50,51 @@ def zoe_depth_node() -> WorkflowNode:
 
 def unimatch_optical_flow_node() -> WorkflowNode:
     return WorkflowNode(class_type="Unimatch_Optical_Flow", meta_title="Unimatch Optical Flow")
+
+
+def layered_model_unload_node() -> WorkflowNode:
+    return WorkflowNode(class_type="Layered_Model_Unload", meta_title="Unload Stage 1 Models")
+
+
+def gguf_loader_node() -> WorkflowNode:
+    return WorkflowNode(class_type="GGUF_Loader", meta_title="Load Wan 2.6 NVFP4")
+
+
+def clip_text_encode_node() -> WorkflowNode:
+    return WorkflowNode(class_type="CLIPTextEncode", meta_title="CLIP Text Encode")
+
+
+def load_image_node() -> WorkflowNode:
+    return WorkflowNode(class_type="LoadImage", meta_title="Load Reference Image")
+
+
+def ip_adapter_faceid_plus_node() -> WorkflowNode:
+    return WorkflowNode(class_type="IP_Adapter_FaceID_Plus", meta_title="IP-Adapter FaceID Plus")
+
+
+def reference_only_node() -> WorkflowNode:
+    return WorkflowNode(class_type="Reference_Only", meta_title="Reference Only")
+
+
+def style_transfer_block_node() -> WorkflowNode:
+    return WorkflowNode(class_type="Style_Transfer_Block", meta_title="Style Transfer Block")
+
+
+def empty_latent_video_node() -> WorkflowNode:
+    return WorkflowNode(class_type="EmptyLatentVideo", meta_title="Empty Latent Video")
+
+
+def vae_encode_node() -> WorkflowNode:
+    return WorkflowNode(class_type="VAEEncode", meta_title="VAE Encode")
+
+
+def flow_guided_noise_injection_node() -> WorkflowNode:
+    return WorkflowNode(class_type="Flow_Guided_Noise_Injection", meta_title="Flow Guided Noise Injection")
+
+
+def free_long_node() -> WorkflowNode:
+    return WorkflowNode(class_type="FreeLong", meta_title="FreeLong Spectral Blending")
+
+
+def ksampler_node() -> WorkflowNode:
+    return WorkflowNode(class_type="KSampler", meta_title="KSampler")
