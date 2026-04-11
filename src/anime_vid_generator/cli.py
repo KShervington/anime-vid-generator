@@ -82,7 +82,7 @@ async def _submit_and_monitor(workflow: dict, config: PipelineConfig) -> None:
     with Progress(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
     ) as progress:
-        task = progress.add_task("Submitting Stage 1 workflow...", total=None)
+        task = progress.add_task("Submitting workflow...", total=None)
         prompt_id = await client.submit_workflow(workflow)
         progress.update(task, description=f"Running (ID: {prompt_id})...")
         async for event in client.monitor_progress(prompt_id):
@@ -92,4 +92,4 @@ async def _submit_and_monitor(workflow: dict, config: PipelineConfig) -> None:
                     task,
                     description=f"Node {data.get('node', '?')}: {data.get('value', 0)}/{data.get('max', 0)}",
                 )
-    console.print(f"[green]Stage 1 complete. Prompt ID: {prompt_id}[/green]")
+    console.print(f"[green]Stage complete. Prompt ID: {prompt_id}[/green]")
