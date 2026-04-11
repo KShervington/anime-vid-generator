@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from ..builder import WorkflowBuilder
 from ..nodes import (
     NodeRef,
+    load_video_node,
+    load_image_node,
     layered_model_unload_node,
     gguf_loader_node,
     clip_text_encode_node,
@@ -15,7 +17,8 @@ from ..nodes import (
     free_long_node,
     ksampler_node,
 )
-from ...config import Stage2Config
+from ...config import Stage1Config, Stage2Config
+from .stage1_motion import build_organic_bus, build_rigid_bus, build_temporal_unification
 
 
 @dataclass
@@ -173,3 +176,64 @@ def build_generation_bus(
     ks_id = builder.add(ks)
 
     return GenerationBusResult(latent_output=(ks_id, 0))
+
+
+def build_stage2_workflow(
+    video_path: str,
+    config: Stage2Config | None = None,
+) -> dict:
+    """Build the complete Stage 2 workflow and return ComfyUI API JSON.
+
+    Creates a single ComfyUI prompt containing all Stage 1 preprocessing
+    nodes (using Stage1Config defaults) followed by all Stage 2 generation
+    nodes. The Stage 1 TemporalUnificationResult.flow_map is wired directly
+    into the Stage 2 latent bus.
+
+    Args:
+        video_path: Absolute path to the source video file.
+        config: Stage2Config override; uses defaults if None.
+
+    Returns:
+        dict in ComfyUI /prompt API format, ready to POST.
+    """
+    if config is None:
+        config = Stage2Config()
+
+    stage1_config = Stage1Config()
+    builder = WorkflowBuilder()
+
+    # Stage 1 — preprocessing
+    video = load_video_node()
+    video.inputs["video"] = video_path
+    video.inputs["frame_load_cap"] = 0
+    video.inputs["skip_first_frames"] = 0
+    vid_id = builder.add(video)
+    image_ref: NodeRef = (vid_id, 0)
+
+    build_organic_bus(builder, image_ref, stage1_config)
+    build_rigid_bus(builder, image_ref, stage1_config)
+    temporal_result = build_temporal_unification(builder, image_ref, stage1_config)
+
+    # Stage 2 — generation
+    model_result = build_model_loading_bus(builder, config)
+
+    face = load_image_node()
+    face.inputs["image"] = config.reference_image_path
+    face_id = builder.add(face)
+    face_ref: NodeRef = (face_id, 0)
+
+    identity_result = build_identity_bus(builder, model_result.model_ref, face_ref, config)
+    cond_result = build_conditioning_bus(builder, model_result.clip_ref, config)
+    latent_result = build_latent_bus(
+        builder, image_ref, temporal_result.flow_map, model_result.vae_ref, config
+    )
+    build_generation_bus(
+        builder,
+        identity_result.conditioned_model_ref,
+        cond_result.positive_ref,
+        cond_result.negative_ref,
+        latent_result.latent_ref,
+        config,
+    )
+
+    return builder.build()

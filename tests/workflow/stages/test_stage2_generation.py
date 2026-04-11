@@ -585,3 +585,112 @@ def test_generation_bus_latent_output_points_to_ksampler(generation_bus_prereqs)
     workflow = builder.build()
     ks_id = _find_node_id(workflow, "KSampler")
     assert result.latent_output[0] == ks_id
+
+
+# ── Assembler ─────────────────────────────────────────────────────────────────
+
+from anime_vid_generator.workflow.stages.stage2_generation import build_stage2_workflow
+
+
+def test_build_stage2_workflow_returns_dict():
+    result = build_stage2_workflow("/tmp/test.mp4")
+    assert isinstance(result, dict)
+    assert len(result) > 0
+
+
+def test_build_stage2_workflow_contains_all_stage1_node_types():
+    result = build_stage2_workflow("/tmp/test.mp4")
+    class_types = {n["class_type"] for n in result.values()}
+    assert {
+        "VHS_LoadVideo",
+        "DWPose_Estimator",
+        "DensePose",
+        "ControlNet_LineArt_Anime",
+        "Canny_Edge",
+        "ZoeDepth",
+        "Unimatch_Optical_Flow",
+    }.issubset(class_types)
+
+
+def test_build_stage2_workflow_contains_all_stage2_node_types():
+    result = build_stage2_workflow("/tmp/test.mp4")
+    class_types = {n["class_type"] for n in result.values()}
+    assert {
+        "Layered_Model_Unload",
+        "GGUF_Loader",
+        "CLIPTextEncode",
+        "IP_Adapter_FaceID_Plus",
+        "Reference_Only",
+        "Style_Transfer_Block",
+        "EmptyLatentVideo",
+        "Flow_Guided_Noise_Injection",
+        "FreeLong",
+        "KSampler",
+    }.issubset(class_types)
+
+
+def test_build_stage2_workflow_with_vae_encode_mode_has_vae_encode_not_empty_latent():
+    config = Stage2Config(latent_mode="vae_encode")
+    result = build_stage2_workflow("/tmp/test.mp4", config=config)
+    class_types = {n["class_type"] for n in result.values()}
+    assert "VAEEncode" in class_types
+    assert "EmptyLatentVideo" not in class_types
+
+
+def test_build_stage2_workflow_video_path_in_load_node():
+    video_path = "/absolute/path/to/video.mp4"
+    result = build_stage2_workflow(video_path)
+    load_nodes = [n for n in result.values() if n["class_type"] == "VHS_LoadVideo"]
+    assert len(load_nodes) == 1
+    assert load_nodes[0]["inputs"]["video"] == video_path
+
+
+def test_build_stage2_workflow_model_path_from_config():
+    config = Stage2Config(model_path="my_custom.gguf")
+    result = build_stage2_workflow("/tmp/test.mp4", config=config)
+    gguf_nodes = [n for n in result.values() if n["class_type"] == "GGUF_Loader"]
+    assert len(gguf_nodes) == 1
+    assert gguf_nodes[0]["inputs"]["model_path"] == "my_custom.gguf"
+
+
+def test_build_stage2_workflow_all_node_links_are_valid():
+    """Every NodeRef link must reference an existing node ID in the workflow."""
+    result = build_stage2_workflow("/tmp/test.mp4")
+    node_ids = set(result.keys())
+    for node in result.values():
+        for v in node["inputs"].values():
+            if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str):
+                assert v[0] in node_ids, f"Dead link: {v} references non-existent node"
+
+
+def test_build_stage2_workflow_uses_stage1_config_defaults_internally():
+    """Stage 1 nodes should use Stage1Config defaults (context_window=32, overlap=8)."""
+    result = build_stage2_workflow("/tmp/test.mp4")
+    flow_nodes = [n for n in result.values() if n["class_type"] == "Unimatch_Optical_Flow"]
+    assert flow_nodes[0]["inputs"]["context_frames"] == 32
+    assert flow_nodes[0]["inputs"]["overlap_frames"] == 8
+
+
+def test_build_stage2_workflow_none_config_uses_defaults():
+    result = build_stage2_workflow("/tmp/test.mp4", config=None)
+    ks_nodes = [n for n in result.values() if n["class_type"] == "KSampler"]
+    assert len(ks_nodes) == 1
+    assert ks_nodes[0]["inputs"]["steps"] == 20
+
+
+def test_build_stage2_workflow_ksampler_tiled_sampling_always_true():
+    result = build_stage2_workflow("/tmp/test.mp4")
+    ks_nodes = [n for n in result.values() if n["class_type"] == "KSampler"]
+    assert ks_nodes[0]["inputs"]["tiled_sampling"] is True
+
+
+def test_build_stage2_workflow_has_exactly_one_layered_model_unload():
+    result = build_stage2_workflow("/tmp/test.mp4")
+    unload_nodes = [n for n in result.values() if n["class_type"] == "Layered_Model_Unload"]
+    assert len(unload_nodes) == 1
+
+
+def test_build_stage2_workflow_has_exactly_two_clip_text_encode_nodes():
+    result = build_stage2_workflow("/tmp/test.mp4")
+    clip_nodes = [n for n in result.values() if n["class_type"] == "CLIPTextEncode"]
+    assert len(clip_nodes) == 2
