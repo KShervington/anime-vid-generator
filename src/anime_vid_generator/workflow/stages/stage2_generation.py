@@ -9,6 +9,9 @@ from ..nodes import (
     ip_adapter_faceid_plus_node,
     reference_only_node,
     style_transfer_block_node,
+    empty_latent_video_node,
+    vae_encode_node,
+    flow_guided_noise_injection_node,
 )
 from ...config import Stage2Config
 
@@ -106,3 +109,34 @@ def build_identity_bus(
     style_id = builder.add(style)
 
     return IdentityBusResult(conditioned_model_ref=(style_id, 0))
+
+
+def build_latent_bus(
+    builder: WorkflowBuilder,
+    image_ref: NodeRef,
+    flow_map: NodeRef,
+    vae_ref: NodeRef,
+    config: Stage2Config,
+) -> LatentBusResult:
+    """Add EmptyLatentVideo or VAEEncode, then Flow_Guided_Noise_Injection."""
+    if config.latent_mode == "empty":
+        latent = empty_latent_video_node()
+        latent.inputs["width"] = config.width
+        latent.inputs["height"] = config.height
+        latent.inputs["length"] = config.context_window_frames
+        latent.inputs["batch_size"] = 1
+        latent_id = builder.add(latent)
+        latent_source_ref: NodeRef = (latent_id, 0)
+    else:  # vae_encode
+        encode = vae_encode_node()
+        encode.inputs["pixels"] = image_ref
+        encode.inputs["vae"] = vae_ref
+        latent_id = builder.add(encode)
+        latent_source_ref = (latent_id, 0)
+
+    noise = flow_guided_noise_injection_node()
+    noise.inputs["latents"] = latent_source_ref
+    noise.inputs["flow_map"] = flow_map
+    noise_id = builder.add(noise)
+
+    return LatentBusResult(latent_ref=(noise_id, 0))

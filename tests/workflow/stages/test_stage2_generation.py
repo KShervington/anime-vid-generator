@@ -299,3 +299,133 @@ def _find_node_id(workflow: dict, class_type: str) -> str:
         if node["class_type"] == class_type:
             return node_id
     raise KeyError(f"No node with class_type={class_type!r} found in workflow")
+
+
+# ── Latent Bus ────────────────────────────────────────────────────────────────
+
+from anime_vid_generator.workflow.stages.stage2_generation import (
+    LatentBusResult,
+    build_latent_bus,
+)
+from anime_vid_generator.workflow.nodes import NodeRef, unimatch_optical_flow_node
+
+
+@pytest.fixture
+def latent_bus_prereqs(builder_with_video):
+    """Returns (builder, image_ref, flow_map_ref, vae_ref) ready for build_latent_bus."""
+    builder, image_ref = builder_with_video
+    # simulate stage1 optical flow
+    flow = unimatch_optical_flow_node()
+    flow.inputs["image"] = image_ref
+    flow_id = builder.add(flow)
+    flow_map: NodeRef = (flow_id, 0)
+    # simulate gguf vae output
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    return builder, image_ref, flow_map, model_result.vae_ref
+
+
+def test_latent_bus_returns_result_dataclass(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    result = build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config())
+    assert isinstance(result, LatentBusResult)
+
+
+def test_latent_bus_empty_mode_adds_empty_latent_video(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config(latent_mode="empty"))
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert "EmptyLatentVideo" in class_types
+
+
+def test_latent_bus_empty_mode_does_not_add_vae_encode(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config(latent_mode="empty"))
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert "VAEEncode" not in class_types
+
+
+def test_latent_bus_vae_encode_mode_adds_vae_encode(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config(latent_mode="vae_encode"))
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert "VAEEncode" in class_types
+
+
+def test_latent_bus_vae_encode_mode_does_not_add_empty_latent_video(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config(latent_mode="vae_encode"))
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert "EmptyLatentVideo" not in class_types
+
+
+def test_latent_bus_empty_latent_uses_width_height_from_config(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    config = Stage2Config(width=832, height=480, latent_mode="empty")
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, config)
+    workflow = builder.build()
+    latent_node_id = _find_node_id(workflow, "EmptyLatentVideo")
+    inputs = workflow[latent_node_id]["inputs"]
+    assert inputs["width"] == 832
+    assert inputs["height"] == 480
+
+
+def test_latent_bus_empty_latent_uses_context_window_as_length(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    config = Stage2Config(context_window_frames=16, latent_mode="empty")
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, config)
+    workflow = builder.build()
+    latent_node_id = _find_node_id(workflow, "EmptyLatentVideo")
+    assert workflow[latent_node_id]["inputs"]["length"] == 16
+
+
+def test_latent_bus_empty_latent_batch_size_is_1(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config(latent_mode="empty"))
+    workflow = builder.build()
+    latent_node_id = _find_node_id(workflow, "EmptyLatentVideo")
+    assert workflow[latent_node_id]["inputs"]["batch_size"] == 1
+
+
+def test_latent_bus_vae_encode_links_to_image_ref(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config(latent_mode="vae_encode"))
+    workflow = builder.build()
+    vae_node_id = _find_node_id(workflow, "VAEEncode")
+    assert workflow[vae_node_id]["inputs"]["pixels"] == list(image_ref)
+
+
+def test_latent_bus_vae_encode_links_to_vae_ref(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config(latent_mode="vae_encode"))
+    workflow = builder.build()
+    vae_node_id = _find_node_id(workflow, "VAEEncode")
+    assert workflow[vae_node_id]["inputs"]["vae"] == list(vae_ref)
+
+
+def test_latent_bus_adds_flow_guided_noise_injection(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config())
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert "Flow_Guided_Noise_Injection" in class_types
+
+
+def test_latent_bus_flow_noise_links_to_flow_map(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config())
+    workflow = builder.build()
+    fgni_id = _find_node_id(workflow, "Flow_Guided_Noise_Injection")
+    assert workflow[fgni_id]["inputs"]["flow_map"] == list(flow_map)
+
+
+def test_latent_bus_latent_ref_is_slot_0(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    result = build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config())
+    assert result.latent_ref[1] == 0
+
+
+def test_latent_bus_latent_ref_points_to_flow_noise_node(latent_bus_prereqs):
+    builder, image_ref, flow_map, vae_ref = latent_bus_prereqs
+    result = build_latent_bus(builder, image_ref, flow_map, vae_ref, Stage2Config())
+    workflow = builder.build()
+    fgni_id = _find_node_id(workflow, "Flow_Guided_Noise_Injection")
+    assert result.latent_ref[0] == fgni_id
