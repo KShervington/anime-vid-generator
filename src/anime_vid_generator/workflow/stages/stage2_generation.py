@@ -1,7 +1,15 @@
 from dataclasses import dataclass
 
 from ..builder import WorkflowBuilder
-from ..nodes import NodeRef, layered_model_unload_node, gguf_loader_node, clip_text_encode_node
+from ..nodes import (
+    NodeRef,
+    layered_model_unload_node,
+    gguf_loader_node,
+    clip_text_encode_node,
+    ip_adapter_faceid_plus_node,
+    reference_only_node,
+    style_transfer_block_node,
+)
 from ...config import Stage2Config
 
 
@@ -72,3 +80,29 @@ def build_conditioning_bus(
         positive_ref=(pos_id, 0),
         negative_ref=(neg_id, 0),
     )
+
+
+def build_identity_bus(
+    builder: WorkflowBuilder,
+    model_ref: NodeRef,
+    face_ref: NodeRef,
+    config: Stage2Config,
+) -> IdentityBusResult:
+    """Add IP_Adapter_FaceID_Plus → Reference_Only → Style_Transfer_Block chain."""
+    ip = ip_adapter_faceid_plus_node()
+    ip.inputs["model"] = model_ref
+    ip.inputs["image"] = face_ref
+    ip.inputs["weight"] = config.ip_adapter_weight
+    ip_id = builder.add(ip)
+
+    ref = reference_only_node()
+    ref.inputs["model"] = (ip_id, 0)
+    ref.inputs["reference"] = face_ref
+    ref_id = builder.add(ref)
+
+    style = style_transfer_block_node()
+    style.inputs["model"] = (ref_id, 0)
+    style.inputs["cfg"] = config.style_transfer_cfg
+    style_id = builder.add(style)
+
+    return IdentityBusResult(conditioned_model_ref=(style_id, 0))

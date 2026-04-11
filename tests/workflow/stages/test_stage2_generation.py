@@ -170,3 +170,132 @@ def test_conditioning_bus_positive_and_negative_are_different_nodes(builder_with
     model_result = build_model_loading_bus(builder, Stage2Config())
     result = build_conditioning_bus(builder, model_result.clip_ref, Stage2Config())
     assert result.positive_ref[0] != result.negative_ref[0]
+
+
+# ── Identity Bus ──────────────────────────────────────────────────────────────
+
+from anime_vid_generator.workflow.stages.stage2_generation import (
+    IdentityBusResult,
+    build_identity_bus,
+)
+from anime_vid_generator.workflow.nodes import load_image_node
+
+
+@pytest.fixture
+def model_and_face_refs(builder_with_video):
+    """Returns (builder, model_ref, face_ref) with face node already added."""
+    builder, _ = builder_with_video
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    face = load_image_node()
+    face.inputs["image"] = "/tmp/face.png"
+    face_id = builder.add(face)
+    return builder, model_result.model_ref, (face_id, 0)
+
+
+def test_identity_bus_returns_result_dataclass(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    result = build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    assert isinstance(result, IdentityBusResult)
+
+
+def test_identity_bus_adds_ip_adapter_node(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert "IP_Adapter_FaceID_Plus" in class_types
+
+
+def test_identity_bus_adds_reference_only_node(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert "Reference_Only" in class_types
+
+
+def test_identity_bus_adds_style_transfer_block_node(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert "Style_Transfer_Block" in class_types
+
+
+def test_identity_bus_ip_adapter_links_to_model_ref(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    result = build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    workflow = builder.build()
+    ip_node_id = _find_node_id(workflow, "IP_Adapter_FaceID_Plus")
+    assert workflow[ip_node_id]["inputs"]["model"] == list(model_ref)
+
+
+def test_identity_bus_ip_adapter_links_to_face_ref(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    result = build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    workflow = builder.build()
+    ip_node_id = _find_node_id(workflow, "IP_Adapter_FaceID_Plus")
+    assert workflow[ip_node_id]["inputs"]["image"] == list(face_ref)
+
+
+def test_identity_bus_ip_adapter_weight_from_config(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    config = Stage2Config(ip_adapter_weight=0.6)
+    result = build_identity_bus(builder, model_ref, face_ref, config)
+    workflow = builder.build()
+    ip_node_id = _find_node_id(workflow, "IP_Adapter_FaceID_Plus")
+    assert workflow[ip_node_id]["inputs"]["weight"] == 0.6
+
+
+def test_identity_bus_reference_only_links_to_ip_adapter_output(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    result = build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    workflow = builder.build()
+    ref_node_id = _find_node_id(workflow, "Reference_Only")
+    ip_node_id = _find_node_id(workflow, "IP_Adapter_FaceID_Plus")
+    assert workflow[ref_node_id]["inputs"]["model"] == [ip_node_id, 0]
+
+
+def test_identity_bus_reference_only_links_face_ref_as_reference(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    result = build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    workflow = builder.build()
+    ref_node_id = _find_node_id(workflow, "Reference_Only")
+    assert workflow[ref_node_id]["inputs"]["reference"] == list(face_ref)
+
+
+def test_identity_bus_style_transfer_links_to_reference_only_output(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    result = build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    workflow = builder.build()
+    style_node_id = _find_node_id(workflow, "Style_Transfer_Block")
+    ref_node_id = _find_node_id(workflow, "Reference_Only")
+    assert workflow[style_node_id]["inputs"]["model"] == [ref_node_id, 0]
+
+
+def test_identity_bus_style_transfer_cfg_from_config(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    config = Stage2Config(style_transfer_cfg=2.0)
+    result = build_identity_bus(builder, model_ref, face_ref, config)
+    workflow = builder.build()
+    style_node_id = _find_node_id(workflow, "Style_Transfer_Block")
+    assert workflow[style_node_id]["inputs"]["cfg"] == 2.0
+
+
+def test_identity_bus_conditioned_model_ref_is_slot_0(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    result = build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    assert result.conditioned_model_ref[1] == 0
+
+
+def test_identity_bus_conditioned_model_ref_points_to_style_transfer(model_and_face_refs):
+    builder, model_ref, face_ref = model_and_face_refs
+    result = build_identity_bus(builder, model_ref, face_ref, Stage2Config())
+    workflow = builder.build()
+    style_node_id = _find_node_id(workflow, "Style_Transfer_Block")
+    assert result.conditioned_model_ref[0] == style_node_id
+
+
+# helper used in identity bus and latent bus tests
+def _find_node_id(workflow: dict, class_type: str) -> str:
+    for node_id, node in workflow.items():
+        if node["class_type"] == class_type:
+            return node_id
+    raise KeyError(f"No node with class_type={class_type!r} found in workflow")
