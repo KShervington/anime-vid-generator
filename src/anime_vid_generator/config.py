@@ -38,6 +38,7 @@ class Stage2Config(BaseModel):
     sampler_scheduler: str = "karras"
     latent_mode: Literal["empty", "vae_encode"] = "empty"
     denoise: float = 1.0
+    seed: int = 0
 
 
 class PipelineConfig(BaseModel):

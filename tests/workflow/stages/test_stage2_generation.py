@@ -15,17 +15,6 @@ def builder_with_video() -> tuple[WorkflowBuilder, NodeRef]:
     return builder, (vid_id, 0)
 
 
-@pytest.fixture
-def flow_map_ref(builder_with_video) -> tuple[WorkflowBuilder, NodeRef, NodeRef]:
-    """builder, image_ref, flow_map_ref — as produced by Stage 1 temporal unification."""
-    from anime_vid_generator.workflow.nodes import unimatch_optical_flow_node
-    builder, image_ref = builder_with_video
-    flow = unimatch_optical_flow_node()
-    flow.inputs["image"] = image_ref
-    flow_id = builder.add(flow)
-    return builder, image_ref, (flow_id, 0)
-
-
 # ── Model Loading Bus ─────────────────────────────────────────────────────────
 
 from anime_vid_generator.workflow.stages.stage2_generation import (
@@ -563,6 +552,15 @@ def test_generation_bus_ksampler_denoise_from_config(generation_bus_prereqs):
     workflow = builder.build()
     ks_id = _find_node_id(workflow, "KSampler")
     assert workflow[ks_id]["inputs"]["denoise"] == 0.75
+
+
+def test_generation_bus_ksampler_seed_from_config(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    config = Stage2Config(seed=42)
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, config)
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    assert workflow[ks_id]["inputs"]["seed"] == 42
 
 
 def test_generation_bus_ksampler_tiled_sampling_is_true(generation_bus_prereqs):

@@ -84,6 +84,10 @@ def test_stage2_config_default_denoise():
     assert Stage2Config().denoise == 1.0
 
 
+def test_stage2_config_default_seed():
+    assert Stage2Config().seed == 0
+
+
 def test_stage2_config_latent_mode_accepts_vae_encode():
     config = Stage2Config(latent_mode="vae_encode")
     assert config.latent_mode == "vae_encode"

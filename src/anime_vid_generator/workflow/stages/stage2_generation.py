@@ -172,6 +172,7 @@ def build_generation_bus(
     ks.inputs["sampler_name"] = config.sampler_name
     ks.inputs["scheduler"] = config.sampler_scheduler
     ks.inputs["denoise"] = config.denoise
+    ks.inputs["seed"] = config.seed
     ks.inputs["tiled_sampling"] = True
     ks_id = builder.add(ks)
 
@@ -217,13 +218,14 @@ def build_stage2_workflow(
     # Stage 2 — generation
     model_result = build_model_loading_bus(builder, config)
 
+    cond_result = build_conditioning_bus(builder, model_result.clip_ref, config)
+
     face = load_image_node()
     face.inputs["image"] = config.reference_image_path
     face_id = builder.add(face)
     face_ref: NodeRef = (face_id, 0)
 
     identity_result = build_identity_bus(builder, model_result.model_ref, face_ref, config)
-    cond_result = build_conditioning_bus(builder, model_result.clip_ref, config)
     latent_result = build_latent_bus(
         builder, image_ref, temporal_result.flow_map, model_result.vae_ref, config
     )
