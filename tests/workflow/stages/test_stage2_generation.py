@@ -429,3 +429,159 @@ def test_latent_bus_latent_ref_points_to_flow_noise_node(latent_bus_prereqs):
     workflow = builder.build()
     fgni_id = _find_node_id(workflow, "Flow_Guided_Noise_Injection")
     assert result.latent_ref[0] == fgni_id
+
+
+# ── Generation Bus ────────────────────────────────────────────────────────────
+
+from anime_vid_generator.workflow.stages.stage2_generation import (
+    GenerationBusResult,
+    build_generation_bus,
+)
+from anime_vid_generator.workflow.nodes import unimatch_optical_flow_node
+
+
+@pytest.fixture
+def generation_bus_prereqs(builder_with_video):
+    """Returns (builder, conditioned_model_ref, positive_ref, negative_ref, latent_ref)."""
+    builder, image_ref = builder_with_video
+    # model loading
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    # face image
+    face = load_image_node()
+    face.inputs["image"] = "/tmp/face.png"
+    face_id = builder.add(face)
+    face_ref: NodeRef = (face_id, 0)
+    # identity
+    identity_result = build_identity_bus(builder, model_result.model_ref, face_ref, Stage2Config())
+    # conditioning
+    cond_result = build_conditioning_bus(builder, model_result.clip_ref, Stage2Config())
+    # flow map
+    flow = unimatch_optical_flow_node()
+    flow.inputs["image"] = image_ref
+    flow_id = builder.add(flow)
+    flow_map: NodeRef = (flow_id, 0)
+    # latent
+    latent_result = build_latent_bus(builder, image_ref, flow_map, model_result.vae_ref, Stage2Config())
+    return (
+        builder,
+        identity_result.conditioned_model_ref,
+        cond_result.positive_ref,
+        cond_result.negative_ref,
+        latent_result.latent_ref,
+    )
+
+
+def test_generation_bus_returns_result_dataclass(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    result = build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    assert isinstance(result, GenerationBusResult)
+
+
+def test_generation_bus_adds_free_long_node(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert "FreeLong" in class_types
+
+
+def test_generation_bus_adds_ksampler_node(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert "KSampler" in class_types
+
+
+def test_generation_bus_freelong_links_to_conditioned_model(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    workflow = builder.build()
+    fl_id = _find_node_id(workflow, "FreeLong")
+    assert workflow[fl_id]["inputs"]["model"] == list(model_ref)
+
+
+def test_generation_bus_freelong_context_params_from_config(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    config = Stage2Config(context_window_frames=16, context_overlap_frames=4)
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, config)
+    workflow = builder.build()
+    fl_id = _find_node_id(workflow, "FreeLong")
+    inputs = workflow[fl_id]["inputs"]
+    assert inputs["context_frames"] == 16
+    assert inputs["overlap_frames"] == 4
+
+
+def test_generation_bus_ksampler_links_to_freelong_output(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    fl_id = _find_node_id(workflow, "FreeLong")
+    assert workflow[ks_id]["inputs"]["model"] == [fl_id, 0]
+
+
+def test_generation_bus_ksampler_links_to_positive(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    assert workflow[ks_id]["inputs"]["positive"] == list(pos_ref)
+
+
+def test_generation_bus_ksampler_links_to_negative(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    assert workflow[ks_id]["inputs"]["negative"] == list(neg_ref)
+
+
+def test_generation_bus_ksampler_links_to_latent(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    assert workflow[ks_id]["inputs"]["latent_image"] == list(latent_ref)
+
+
+def test_generation_bus_ksampler_sampler_settings_from_config(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    config = Stage2Config(sampler_steps=30, sampler_cfg=8.0, sampler_name="dpm_2", sampler_scheduler="sgm_uniform")
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, config)
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    inputs = workflow[ks_id]["inputs"]
+    assert inputs["steps"] == 30
+    assert inputs["cfg"] == 8.0
+    assert inputs["sampler_name"] == "dpm_2"
+    assert inputs["scheduler"] == "sgm_uniform"
+
+
+def test_generation_bus_ksampler_denoise_from_config(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    config = Stage2Config(denoise=0.75)
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, config)
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    assert workflow[ks_id]["inputs"]["denoise"] == 0.75
+
+
+def test_generation_bus_ksampler_tiled_sampling_is_true(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    assert workflow[ks_id]["inputs"]["tiled_sampling"] is True
+
+
+def test_generation_bus_latent_output_is_slot_0(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    result = build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    assert result.latent_output[1] == 0
+
+
+def test_generation_bus_latent_output_points_to_ksampler(generation_bus_prereqs):
+    builder, model_ref, pos_ref, neg_ref, latent_ref = generation_bus_prereqs
+    result = build_generation_bus(builder, model_ref, pos_ref, neg_ref, latent_ref, Stage2Config())
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    assert result.latent_output[0] == ks_id

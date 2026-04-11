@@ -12,6 +12,8 @@ from ..nodes import (
     empty_latent_video_node,
     vae_encode_node,
     flow_guided_noise_injection_node,
+    free_long_node,
+    ksampler_node,
 )
 from ...config import Stage2Config
 
@@ -140,3 +142,34 @@ def build_latent_bus(
     noise_id = builder.add(noise)
 
     return LatentBusResult(latent_ref=(noise_id, 0))
+
+
+def build_generation_bus(
+    builder: WorkflowBuilder,
+    model_ref: NodeRef,
+    positive_ref: NodeRef,
+    negative_ref: NodeRef,
+    latent_ref: NodeRef,
+    config: Stage2Config,
+) -> GenerationBusResult:
+    """Add FreeLong spectral blending node then KSampler."""
+    fl = free_long_node()
+    fl.inputs["model"] = model_ref
+    fl.inputs["context_frames"] = config.context_window_frames
+    fl.inputs["overlap_frames"] = config.context_overlap_frames
+    fl_id = builder.add(fl)
+
+    ks = ksampler_node()
+    ks.inputs["model"] = (fl_id, 0)
+    ks.inputs["positive"] = positive_ref
+    ks.inputs["negative"] = negative_ref
+    ks.inputs["latent_image"] = latent_ref
+    ks.inputs["steps"] = config.sampler_steps
+    ks.inputs["cfg"] = config.sampler_cfg
+    ks.inputs["sampler_name"] = config.sampler_name
+    ks.inputs["scheduler"] = config.sampler_scheduler
+    ks.inputs["denoise"] = config.denoise
+    ks.inputs["tiled_sampling"] = True
+    ks_id = builder.add(ks)
+
+    return GenerationBusResult(latent_output=(ks_id, 0))
