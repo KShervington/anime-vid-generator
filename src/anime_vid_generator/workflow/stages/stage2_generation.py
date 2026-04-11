@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from ..builder import WorkflowBuilder
-from ..nodes import NodeRef, layered_model_unload_node, gguf_loader_node
+from ..nodes import NodeRef, layered_model_unload_node, gguf_loader_node, clip_text_encode_node
 from ...config import Stage2Config
 
 
@@ -49,4 +49,26 @@ def build_model_loading_bus(
         model_ref=(gguf_id, 0),
         clip_ref=(gguf_id, 1),
         vae_ref=(gguf_id, 2),
+    )
+
+
+def build_conditioning_bus(
+    builder: WorkflowBuilder,
+    clip_ref: NodeRef,
+    config: Stage2Config,
+) -> ConditioningBusResult:
+    """Add positive and negative CLIPTextEncode nodes."""
+    pos = clip_text_encode_node()
+    pos.inputs["text"] = config.positive_prompt
+    pos.inputs["clip"] = clip_ref
+    pos_id = builder.add(pos)
+
+    neg = clip_text_encode_node()
+    neg.inputs["text"] = config.negative_prompt
+    neg.inputs["clip"] = clip_ref
+    neg_id = builder.add(neg)
+
+    return ConditioningBusResult(
+        positive_ref=(pos_id, 0),
+        negative_ref=(neg_id, 0),
     )

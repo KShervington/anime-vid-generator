@@ -92,3 +92,81 @@ def test_model_loading_bus_refs_point_to_valid_nodes(builder_with_video):
     workflow = builder.build()
     assert result.model_ref[0] in workflow
     assert result.vae_ref[0] in workflow
+
+
+# ── Conditioning Bus ──────────────────────────────────────────────────────────
+
+from anime_vid_generator.workflow.stages.stage2_generation import (
+    ConditioningBusResult,
+    build_conditioning_bus,
+)
+
+
+def test_conditioning_bus_returns_result_dataclass(builder_with_video):
+    builder, _ = builder_with_video
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    result = build_conditioning_bus(builder, model_result.clip_ref, Stage2Config())
+    assert isinstance(result, ConditioningBusResult)
+
+
+def test_conditioning_bus_adds_two_clip_text_encode_nodes(builder_with_video):
+    builder, _ = builder_with_video
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    build_conditioning_bus(builder, model_result.clip_ref, Stage2Config())
+    class_types = [n["class_type"] for n in builder.build().values()]
+    assert class_types.count("CLIPTextEncode") == 2
+
+
+def test_conditioning_bus_positive_text_from_config(builder_with_video):
+    builder, _ = builder_with_video
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    config = Stage2Config(positive_prompt="my positive prompt")
+    result = build_conditioning_bus(builder, model_result.clip_ref, config)
+    workflow = builder.build()
+    assert workflow[result.positive_ref[0]]["inputs"]["text"] == "my positive prompt"
+
+
+def test_conditioning_bus_negative_text_from_config(builder_with_video):
+    builder, _ = builder_with_video
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    config = Stage2Config(negative_prompt="my negative prompt")
+    result = build_conditioning_bus(builder, model_result.clip_ref, config)
+    workflow = builder.build()
+    assert workflow[result.negative_ref[0]]["inputs"]["text"] == "my negative prompt"
+
+
+def test_conditioning_bus_positive_links_to_clip(builder_with_video):
+    builder, _ = builder_with_video
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    result = build_conditioning_bus(builder, model_result.clip_ref, Stage2Config())
+    workflow = builder.build()
+    assert workflow[result.positive_ref[0]]["inputs"]["clip"] == list(model_result.clip_ref)
+
+
+def test_conditioning_bus_negative_links_to_clip(builder_with_video):
+    builder, _ = builder_with_video
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    result = build_conditioning_bus(builder, model_result.clip_ref, Stage2Config())
+    workflow = builder.build()
+    assert workflow[result.negative_ref[0]]["inputs"]["clip"] == list(model_result.clip_ref)
+
+
+def test_conditioning_bus_positive_ref_is_slot_0(builder_with_video):
+    builder, _ = builder_with_video
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    result = build_conditioning_bus(builder, model_result.clip_ref, Stage2Config())
+    assert result.positive_ref[1] == 0
+
+
+def test_conditioning_bus_negative_ref_is_slot_0(builder_with_video):
+    builder, _ = builder_with_video
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    result = build_conditioning_bus(builder, model_result.clip_ref, Stage2Config())
+    assert result.negative_ref[1] == 0
+
+
+def test_conditioning_bus_positive_and_negative_are_different_nodes(builder_with_video):
+    builder, _ = builder_with_video
+    model_result = build_model_loading_bus(builder, Stage2Config())
+    result = build_conditioning_bus(builder, model_result.clip_ref, Stage2Config())
+    assert result.positive_ref[0] != result.negative_ref[0]
