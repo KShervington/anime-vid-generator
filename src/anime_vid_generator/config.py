@@ -21,8 +21,29 @@ class Stage1Config(BaseModel):
     canny_high_threshold: int = 200
 
 
+class Stage2Config(BaseModel):
+    model_path: str = "wan_2_6_nvfp4.gguf"
+    reference_image_path: str = ""
+    ip_adapter_weight: float = 0.8
+    style_transfer_cfg: float = 1.5
+    positive_prompt: str = "cinematic anime, ufotable style, high quality"
+    negative_prompt: str = "blurry, low quality, photorealistic"
+    width: int = 1280
+    height: int = 720
+    context_window_frames: int = 32
+    context_overlap_frames: int = 8
+    sampler_steps: int = 20
+    sampler_cfg: float = 7.0
+    sampler_name: str = "euler"
+    sampler_scheduler: str = "karras"
+    latent_mode: Literal["empty", "vae_encode"] = "empty"
+    denoise: float = 1.0
+    seed: int = 0
+
+
 class PipelineConfig(BaseModel):
     hardware: HardwareConfig = Field(default_factory=HardwareConfig)
     stage1: Stage1Config = Field(default_factory=Stage1Config)
+    stage2: Stage2Config = Field(default_factory=Stage2Config)
     target_fps: int = 24
     output_resolution: tuple[int, int] = (3840, 2160)

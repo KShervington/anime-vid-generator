@@ -60,3 +60,107 @@ def test_zoe_depth_node_class_type():
 
 def test_unimatch_optical_flow_node_class_type():
     assert unimatch_optical_flow_node().class_type == "Unimatch_Optical_Flow"
+
+
+from anime_vid_generator.workflow.nodes import (
+    layered_model_unload_node,
+    gguf_loader_node,
+    clip_text_encode_node,
+    load_image_node,
+    ip_adapter_faceid_plus_node,
+    reference_only_node,
+    style_transfer_block_node,
+    empty_latent_video_node,
+    vae_encode_node,
+    flow_guided_noise_injection_node,
+    free_long_node,
+    ksampler_node,
+)
+
+
+def test_layered_model_unload_node_class_type():
+    assert layered_model_unload_node().class_type == "Layered_Model_Unload"
+
+
+def test_gguf_loader_node_class_type():
+    assert gguf_loader_node().class_type == "GGUF_Loader"
+
+
+def test_clip_text_encode_node_class_type():
+    assert clip_text_encode_node().class_type == "CLIPTextEncode"
+
+
+def test_load_image_node_class_type():
+    assert load_image_node().class_type == "LoadImage"
+
+
+def test_ip_adapter_faceid_plus_node_class_type():
+    assert ip_adapter_faceid_plus_node().class_type == "IP_Adapter_FaceID_Plus"
+
+
+def test_reference_only_node_class_type():
+    assert reference_only_node().class_type == "Reference_Only"
+
+
+def test_style_transfer_block_node_class_type():
+    assert style_transfer_block_node().class_type == "Style_Transfer_Block"
+
+
+def test_empty_latent_video_node_class_type():
+    assert empty_latent_video_node().class_type == "EmptyLatentVideo"
+
+
+def test_vae_encode_node_class_type():
+    assert vae_encode_node().class_type == "VAEEncode"
+
+
+def test_flow_guided_noise_injection_node_class_type():
+    assert flow_guided_noise_injection_node().class_type == "Flow_Guided_Noise_Injection"
+
+
+def test_free_long_node_class_type():
+    assert free_long_node().class_type == "FreeLong"
+
+
+def test_ksampler_node_class_type():
+    assert ksampler_node().class_type == "KSampler"
+
+
+def test_all_stage2_factories_return_workflow_node():
+    from anime_vid_generator.workflow.nodes import WorkflowNode
+    factories = [
+        layered_model_unload_node,
+        gguf_loader_node,
+        clip_text_encode_node,
+        load_image_node,
+        ip_adapter_faceid_plus_node,
+        reference_only_node,
+        style_transfer_block_node,
+        empty_latent_video_node,
+        vae_encode_node,
+        flow_guided_noise_injection_node,
+        free_long_node,
+        ksampler_node,
+    ]
+    for factory in factories:
+        assert isinstance(factory(), WorkflowNode), f"{factory.__name__} did not return WorkflowNode"
+
+
+def test_all_stage2_factories_have_empty_inputs_by_default():
+    factories = [
+        layered_model_unload_node,
+        gguf_loader_node,
+        clip_text_encode_node,
+        load_image_node,
+        ip_adapter_faceid_plus_node,
+        reference_only_node,
+        style_transfer_block_node,
+        empty_latent_video_node,
+        vae_encode_node,
+        flow_guided_noise_injection_node,
+        free_long_node,
+        ksampler_node,
+    ]
+    for factory in factories:
+        node = factory()
+        assert node.inputs == {}, f"{factory.__name__} should return node with empty inputs"
