@@ -4,10 +4,14 @@ from anime_vid_generator.workflow.builder import WorkflowBuilder
 from anime_vid_generator.workflow.nodes import (
     load_video_node,
     unimatch_optical_flow_node,
+    gguf_loader_node,
+    clip_text_encode_node,
 )
 from anime_vid_generator.workflow.stages.stage3_vfx import (
     TrackingBusResult,
+    VFXInpaintingBusResult,
     build_tracking_bus,
+    build_vfx_inpainting_bus,
 )
 
 
@@ -108,3 +112,100 @@ def test_tracking_bus_result_ref_is_slot_0(builder_with_video_and_flow):
     builder, image_ref, flow_map = builder_with_video_and_flow
     result = build_tracking_bus(builder, image_ref, flow_map, Stage3Config())
     assert result.dilated_mask_ref[1] == 0
+
+
+@pytest.fixture
+def vfx_bus_refs(builder_with_video_and_flow):
+    builder, image_ref, flow_map = builder_with_video_and_flow
+    tracking_result = build_tracking_bus(builder, image_ref, flow_map, Stage3Config())
+    model_node = gguf_loader_node()
+    model_id = builder.add(model_node)
+    model_ref = (model_id, 0)
+    vae_ref = (model_id, 2)
+    pos_node = clip_text_encode_node()
+    pos_id = builder.add(pos_node)
+    pos_ref = (pos_id, 0)
+    neg_node = clip_text_encode_node()
+    neg_id = builder.add(neg_node)
+    neg_ref = (neg_id, 0)
+    return builder, model_ref, vae_ref, image_ref, tracking_result.dilated_mask_ref, pos_ref, neg_ref
+
+
+def test_vfx_inpainting_bus_returns_result_dataclass(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    result = build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, Stage3Config()
+    )
+    assert isinstance(result, VFXInpaintingBusResult)
+
+
+def test_vfx_inpainting_bus_adds_lora_loader(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, Stage3Config()
+    )
+    workflow = builder.build()
+    class_types = {n["class_type"] for n in workflow.values()}
+    assert "LoRA_Loader" in class_types
+
+
+def test_vfx_inpainting_bus_adds_vae_encode_for_inpaint(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, Stage3Config()
+    )
+    workflow = builder.build()
+    class_types = {n["class_type"] for n in workflow.values()}
+    assert "VAEEncodeForInpaint" in class_types
+
+
+def test_vfx_inpainting_bus_lora_links_to_model_ref(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, Stage3Config()
+    )
+    workflow = builder.build()
+    lora_id = _find_node_id(workflow, "LoRA_Loader")
+    assert workflow[lora_id]["inputs"]["model"] == list(model_ref)
+
+
+def test_vfx_inpainting_bus_lora_sets_lora_name(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    config = Stage3Config(vfx_lora_path="custom_vfx.safetensors")
+    build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, config
+    )
+    workflow = builder.build()
+    lora_id = _find_node_id(workflow, "LoRA_Loader")
+    assert workflow[lora_id]["inputs"]["lora_name"] == "custom_vfx.safetensors"
+
+
+def test_vfx_inpainting_bus_vae_encode_links_mask(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, Stage3Config()
+    )
+    workflow = builder.build()
+    encode_id = _find_node_id(workflow, "VAEEncodeForInpaint")
+    assert workflow[encode_id]["inputs"]["mask"] == list(dilated_mask_ref)
+
+
+def test_vfx_inpainting_bus_ksampler_uses_high_cfg(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    config = Stage3Config(vfx_cfg=9.0)
+    build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, config
+    )
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    assert workflow[ks_id]["inputs"]["cfg"] == 9.0
+
+
+def test_vfx_inpainting_bus_result_points_to_ksampler(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    result = build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, Stage3Config()
+    )
+    workflow = builder.build()
+    ks_id = _find_node_id(workflow, "KSampler")
+    assert result.latent_output == (ks_id, 0)
