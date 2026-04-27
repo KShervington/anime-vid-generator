@@ -209,3 +209,31 @@ def test_vfx_inpainting_bus_result_points_to_ksampler(vfx_bus_refs):
     workflow = builder.build()
     ks_id = _find_node_id(workflow, "KSampler")
     assert result.latent_output == (ks_id, 0)
+
+
+def test_vfx_inpainting_bus_result_latent_output_is_slot_0(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    result = build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, Stage3Config()
+    )
+    assert result.latent_output[1] == 0
+
+
+def test_vfx_inpainting_bus_vae_encode_links_pixels(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, Stage3Config()
+    )
+    workflow = builder.build()
+    encode_id = _find_node_id(workflow, "VAEEncodeForInpaint")
+    assert workflow[encode_id]["inputs"]["pixels"] == list(image_ref)
+
+
+def test_vfx_inpainting_bus_vae_encode_links_vae(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, Stage3Config()
+    )
+    workflow = builder.build()
+    encode_id = _find_node_id(workflow, "VAEEncodeForInpaint")
+    assert workflow[encode_id]["inputs"]["vae"] == list(vae_ref)
