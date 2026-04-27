@@ -287,3 +287,13 @@ def test_build_stage3_workflow_vfx_ksampler_uses_config_cfg():
     ks_nodes = [n for n in result.values() if n["class_type"] == "KSampler"]
     cfgs = [n["inputs"]["cfg"] for n in ks_nodes]
     assert 9.5 in cfgs
+
+
+def test_build_stage3_workflow_all_node_links_are_valid():
+    """Every NodeRef link must reference an existing node ID in the workflow."""
+    result = build_stage3_workflow("/tmp/test.mp4")
+    node_ids = set(result.keys())
+    for node in result.values():
+        for v in node["inputs"].values():
+            if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str):
+                assert v[0] in node_ids, f"Dead link: {v} references non-existent node"
