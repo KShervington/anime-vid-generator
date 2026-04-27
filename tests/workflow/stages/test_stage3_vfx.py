@@ -102,3 +102,9 @@ def test_tracking_bus_result_ref_points_to_mask_dilate(builder_with_video_and_fl
     workflow = builder.build()
     dilate_id = _find_node_id(workflow, "Mask_Dilate")
     assert result.dilated_mask_ref == (dilate_id, 0)
+
+
+def test_tracking_bus_result_ref_is_slot_0(builder_with_video_and_flow):
+    builder, image_ref, flow_map = builder_with_video_and_flow
+    result = build_tracking_bus(builder, image_ref, flow_map, Stage3Config())
+    assert result.dilated_mask_ref[1] == 0
