@@ -41,9 +41,25 @@ class Stage2Config(BaseModel):
     seed: int = 0
 
 
+class Stage3Config(BaseModel):
+    emitter_prompt: str = "sword tip"
+    mask_dilation: int = 8
+    vfx_lora_path: str = "Ufotable_Fire_Trails.safetensors"
+    vfx_lora_strength: float = 0.85
+    vfx_cfg: float = 8.5
+    vfx_positive_prompt: str = "fire trails, vfx, ufotable style, elemental effects"
+    vfx_negative_prompt: str = "blurry, low quality, photorealistic"
+    sampler_steps: int = 20
+    sampler_name: str = "euler"
+    sampler_scheduler: str = "karras"
+    denoise: float = 0.8
+    seed: int = 0
+
+
 class PipelineConfig(BaseModel):
     hardware: HardwareConfig = Field(default_factory=HardwareConfig)
     stage1: Stage1Config = Field(default_factory=Stage1Config)
     stage2: Stage2Config = Field(default_factory=Stage2Config)
+    stage3: Stage3Config = Field(default_factory=Stage3Config)
     target_fps: int = 24
     output_resolution: tuple[int, int] = (3840, 2160)
