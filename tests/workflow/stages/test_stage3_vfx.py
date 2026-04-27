@@ -12,6 +12,7 @@ from anime_vid_generator.workflow.stages.stage3_vfx import (
     VFXInpaintingBusResult,
     build_tracking_bus,
     build_vfx_inpainting_bus,
+    build_stage3_workflow,
 )
 
 
@@ -237,3 +238,52 @@ def test_vfx_inpainting_bus_vae_encode_links_vae(vfx_bus_refs):
     workflow = builder.build()
     encode_id = _find_node_id(workflow, "VAEEncodeForInpaint")
     assert workflow[encode_id]["inputs"]["vae"] == list(vae_ref)
+
+
+def test_build_stage3_workflow_returns_dict():
+    result = build_stage3_workflow("/tmp/test.mp4")
+    assert isinstance(result, dict)
+    assert len(result) > 0
+
+
+def test_build_stage3_workflow_contains_stage1_nodes():
+    result = build_stage3_workflow("/tmp/test.mp4")
+    class_types = {n["class_type"] for n in result.values()}
+    assert "DWPose_Estimator" in class_types
+    assert "Unimatch_Optical_Flow" in class_types
+
+
+def test_build_stage3_workflow_contains_stage2_nodes():
+    result = build_stage3_workflow("/tmp/test.mp4")
+    class_types = {n["class_type"] for n in result.values()}
+    assert "GGUF_Loader" in class_types
+    assert "IP_Adapter_FaceID_Plus" in class_types
+
+
+def test_build_stage3_workflow_contains_stage3_nodes():
+    result = build_stage3_workflow("/tmp/test.mp4")
+    class_types = {n["class_type"] for n in result.values()}
+    assert "SAM3_VideoSegmenter" in class_types
+    assert "Mask_Dilate" in class_types
+    assert "VAEEncodeForInpaint" in class_types
+    assert "LoRA_Loader" in class_types
+
+
+def test_build_stage3_workflow_sets_video_path():
+    result = build_stage3_workflow("/tmp/my_video.mp4")
+    load_nodes = [n for n in result.values() if n["class_type"] == "VHS_LoadVideo"]
+    assert load_nodes[0]["inputs"]["video"] == "/tmp/my_video.mp4"
+
+
+def test_build_stage3_workflow_has_two_ksamplers():
+    result = build_stage3_workflow("/tmp/test.mp4")
+    ks_nodes = [n for n in result.values() if n["class_type"] == "KSampler"]
+    assert len(ks_nodes) == 2
+
+
+def test_build_stage3_workflow_vfx_ksampler_uses_config_cfg():
+    config = Stage3Config(vfx_cfg=9.5)
+    result = build_stage3_workflow("/tmp/test.mp4", config)
+    ks_nodes = [n for n in result.values() if n["class_type"] == "KSampler"]
+    cfgs = [n["inputs"]["cfg"] for n in ks_nodes]
+    assert 9.5 in cfgs
