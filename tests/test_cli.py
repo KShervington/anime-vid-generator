@@ -120,3 +120,55 @@ def test_stage2_nonexistent_video_exits_nonzero():
 def test_stage2_help_exits_zero():
     result = runner.invoke(app, ["stage2", "--help"])
     assert result.exit_code == 0
+
+
+def test_stage3_dry_run_outputs_valid_json(tmp_path):
+    video = tmp_path / "test.mp4"
+    video.write_bytes(b"fake")
+    result = runner.invoke(app, ["stage3", str(video), "--dry-run"])
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    class_types = {n["class_type"] for n in parsed.values()}
+    assert "SAM3_VideoSegmenter" in class_types
+    assert "VAEEncodeForInpaint" in class_types
+
+
+def test_stage3_dry_run_sets_video_path(tmp_path):
+    video = tmp_path / "test.mp4"
+    video.write_bytes(b"fake")
+    result = runner.invoke(app, ["stage3", str(video), "--dry-run"])
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    load_nodes = [n for n in parsed.values() if n["class_type"] == "VHS_LoadVideo"]
+    assert load_nodes[0]["inputs"]["video"] == str(video)
+
+
+def test_stage3_dry_run_custom_emitter_prompt(tmp_path):
+    video = tmp_path / "test.mp4"
+    video.write_bytes(b"fake")
+    result = runner.invoke(app, ["stage3", str(video), "--emitter-prompt", "rear tire", "--dry-run"])
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    sam_nodes = [n for n in parsed.values() if n["class_type"] == "SAM3_VideoSegmenter"]
+    assert sam_nodes[0]["inputs"]["emitter_prompt"] == "rear tire"
+
+
+def test_stage3_dry_run_custom_vfx_cfg(tmp_path):
+    video = tmp_path / "test.mp4"
+    video.write_bytes(b"fake")
+    result = runner.invoke(app, ["stage3", str(video), "--vfx-cfg", "9.5", "--dry-run"])
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    ks_nodes = [n for n in parsed.values() if n["class_type"] == "KSampler"]
+    cfgs = [n["inputs"]["cfg"] for n in ks_nodes]
+    assert 9.5 in cfgs
+
+
+def test_stage3_nonexistent_video_exits_nonzero():
+    result = runner.invoke(app, ["stage3", "/nonexistent/video.mp4"])
+    assert result.exit_code != 0
+
+
+def test_stage3_help_exits_zero():
+    result = runner.invoke(app, ["stage3", "--help"])
+    assert result.exit_code == 0
