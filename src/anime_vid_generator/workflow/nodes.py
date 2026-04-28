@@ -98,3 +98,19 @@ def free_long_node() -> WorkflowNode:
 
 def ksampler_node() -> WorkflowNode:
     return WorkflowNode(class_type="KSampler", meta_title="KSampler")
+
+
+def sam3_video_segmenter_node() -> WorkflowNode:
+    return WorkflowNode(class_type="SAM3_VideoSegmenter", meta_title="SAM 3 Video Segmenter")
+
+
+def mask_dilate_node() -> WorkflowNode:
+    return WorkflowNode(class_type="Mask_Dilate", meta_title="Mask Dilate")
+
+
+def vae_encode_for_inpaint_node() -> WorkflowNode:
+    return WorkflowNode(class_type="VAEEncodeForInpaint", meta_title="VAE Encode For Inpaint")
+
+
+def lora_loader_node() -> WorkflowNode:
+    return WorkflowNode(class_type="LoRA_Loader", meta_title="VFX LoRA Loader")

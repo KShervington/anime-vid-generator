@@ -7,9 +7,10 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from .client import ComfyUIClient
-from .config import PipelineConfig, Stage2Config
+from .config import PipelineConfig, Stage2Config, Stage3Config
 from .workflow.stages.stage1_motion import build_stage1_workflow
 from .workflow.stages.stage2_generation import build_stage2_workflow
+from .workflow.stages.stage3_vfx import build_stage3_workflow
 
 app = typer.Typer(name="kinetic", help="Project Kinetic: Anime video generation pipeline")
 console = Console()
@@ -69,6 +70,51 @@ def stage2(
         denoise=denoise,
     )
     workflow = build_stage2_workflow(str(video.resolve()), config=config)
+
+    if dry_run:
+        console.print_json(json.dumps(workflow))
+        raise typer.Exit()
+
+    asyncio.run(_submit_and_monitor(workflow, pipeline_config))
+
+
+@app.command()
+def stage3(
+    video: Path = typer.Argument(..., help="Path to source video file", exists=True),
+    emitter_prompt: str = typer.Option("sword tip", "--emitter-prompt", help="SAM 3 emitter description"),
+    vfx_lora: str = typer.Option(
+        "Ufotable_Fire_Trails.safetensors",
+        "--vfx-lora",
+        help="VFX LoRA filename",
+    ),
+    vfx_cfg: float = typer.Option(8.5, "--vfx-cfg", help="CFG scale for VFX inpainting KSampler"),
+    vfx_prompt: str = typer.Option(
+        "fire trails, vfx, ufotable style, elemental effects",
+        "--vfx-prompt",
+        help="Positive prompt for VFX inpainting pass",
+    ),
+    vfx_negative_prompt: str = typer.Option(
+        "blurry, low quality, photorealistic",
+        "--vfx-negative-prompt",
+        help="Negative prompt for VFX inpainting pass",
+    ),
+    seed: int = typer.Option(0, "--seed", help="Sampler seed"),
+    comfyui_url: str = typer.Option("http://127.0.0.1:8188", help="ComfyUI server URL"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print workflow JSON without submitting"),
+) -> None:
+    """Run Stage 3: Dynamic VFX & Masked Inpainting — emitter tracking and elemental effects."""
+    pipeline_config = PipelineConfig()
+    pipeline_config.hardware.comfyui_url = comfyui_url
+
+    config = Stage3Config(
+        emitter_prompt=emitter_prompt,
+        vfx_lora_path=vfx_lora,
+        vfx_cfg=vfx_cfg,
+        vfx_positive_prompt=vfx_prompt,
+        vfx_negative_prompt=vfx_negative_prompt,
+        seed=seed,
+    )
+    workflow = build_stage3_workflow(str(video.resolve()), config=config)
 
     if dry_run:
         console.print_json(json.dumps(workflow))

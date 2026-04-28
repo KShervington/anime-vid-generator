@@ -75,6 +75,10 @@ from anime_vid_generator.workflow.nodes import (
     flow_guided_noise_injection_node,
     free_long_node,
     ksampler_node,
+    sam3_video_segmenter_node,
+    mask_dilate_node,
+    vae_encode_for_inpaint_node,
+    lora_loader_node,
 )
 
 
@@ -164,3 +168,35 @@ def test_all_stage2_factories_have_empty_inputs_by_default():
     for factory in factories:
         node = factory()
         assert node.inputs == {}, f"{factory.__name__} should return node with empty inputs"
+
+
+def test_sam3_video_segmenter_node_class_type():
+    node = sam3_video_segmenter_node()
+    assert node.class_type == "SAM3_VideoSegmenter"
+
+
+def test_mask_dilate_node_class_type():
+    node = mask_dilate_node()
+    assert node.class_type == "Mask_Dilate"
+
+
+def test_vae_encode_for_inpaint_node_class_type():
+    node = vae_encode_for_inpaint_node()
+    assert node.class_type == "VAEEncodeForInpaint"
+
+
+def test_lora_loader_node_class_type():
+    node = lora_loader_node()
+    assert node.class_type == "LoRA_Loader"
+
+
+def test_all_stage3_factories_have_empty_inputs_by_default():
+    factories = [
+        sam3_video_segmenter_node,
+        mask_dilate_node,
+        vae_encode_for_inpaint_node,
+        lora_loader_node,
+    ]
+    for factory in factories:
+        node = factory()
+        assert node.inputs == {}, f"{factory.__name__} should have empty inputs by default"

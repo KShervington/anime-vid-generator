@@ -1,4 +1,10 @@
-from anime_vid_generator.config import HardwareConfig, Stage1Config, Stage2Config, PipelineConfig
+from anime_vid_generator.config import (
+    HardwareConfig,
+    Stage1Config,
+    Stage2Config,
+    Stage3Config,
+    PipelineConfig,
+)
 
 
 def test_hardware_vram_budget_fits_in_envelope():
@@ -101,3 +107,45 @@ def test_stage2_config_custom_prompt():
 def test_pipeline_config_composes_stage2():
     config = PipelineConfig()
     assert isinstance(config.stage2, Stage2Config)
+
+
+def test_stage3_config_defaults():
+    config = Stage3Config()
+    assert config.emitter_prompt == "sword tip"
+    assert config.mask_dilation == 8
+    assert config.vfx_lora_path == "Ufotable_Fire_Trails.safetensors"
+    assert config.vfx_lora_strength == 0.85
+    assert config.vfx_cfg == 8.5
+    assert config.vfx_positive_prompt == "fire trails, vfx, ufotable style, elemental effects"
+    assert config.vfx_negative_prompt == "blurry, low quality, photorealistic"
+    assert config.sampler_steps == 20
+    assert config.sampler_name == "euler"
+    assert config.sampler_scheduler == "karras"
+    assert config.denoise == 0.8
+    assert config.seed == 0
+
+
+def test_stage3_config_is_pydantic_model():
+    from pydantic import BaseModel
+    assert issubclass(Stage3Config, BaseModel)
+
+
+def test_stage3_config_custom_values():
+    config = Stage3Config(emitter_prompt="rear tire", vfx_cfg=9.0)
+    assert config.emitter_prompt == "rear tire"
+    assert config.vfx_cfg == 9.0
+
+
+def test_stage3_config_vfx_cfg_is_float():
+    config = Stage3Config()
+    assert isinstance(config.vfx_cfg, float)
+
+
+def test_stage3_config_mask_dilation_is_int():
+    config = Stage3Config()
+    assert isinstance(config.mask_dilation, int)
+
+
+def test_pipeline_config_has_stage3():
+    config = PipelineConfig()
+    assert isinstance(config.stage3, Stage3Config)
