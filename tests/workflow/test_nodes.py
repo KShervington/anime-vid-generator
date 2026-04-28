@@ -188,3 +188,15 @@ def test_vae_encode_for_inpaint_node_class_type():
 def test_lora_loader_node_class_type():
     node = lora_loader_node()
     assert node.class_type == "LoRA_Loader"
+
+
+def test_all_stage3_factories_have_empty_inputs_by_default():
+    factories = [
+        sam3_video_segmenter_node,
+        mask_dilate_node,
+        vae_encode_for_inpaint_node,
+        lora_loader_node,
+    ]
+    for factory in factories:
+        node = factory()
+        assert node.inputs == {}, f"{factory.__name__} should have empty inputs by default"

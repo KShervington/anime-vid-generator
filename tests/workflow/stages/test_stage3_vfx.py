@@ -240,6 +240,28 @@ def test_vfx_inpainting_bus_vae_encode_links_vae(vfx_bus_refs):
     assert workflow[encode_id]["inputs"]["vae"] == list(vae_ref)
 
 
+def test_vfx_inpainting_bus_lora_sets_strength_model(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    config = Stage3Config(vfx_lora_strength=0.6)
+    build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, config
+    )
+    workflow = builder.build()
+    lora_id = _find_node_id(workflow, "LoRA_Loader")
+    assert workflow[lora_id]["inputs"]["strength_model"] == 0.6
+
+
+def test_vfx_inpainting_bus_lora_sets_strength_clip(vfx_bus_refs):
+    builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref = vfx_bus_refs
+    config = Stage3Config(vfx_lora_strength=0.6)
+    build_vfx_inpainting_bus(
+        builder, model_ref, vae_ref, image_ref, dilated_mask_ref, pos_ref, neg_ref, config
+    )
+    workflow = builder.build()
+    lora_id = _find_node_id(workflow, "LoRA_Loader")
+    assert workflow[lora_id]["inputs"]["strength_clip"] == 0.6
+
+
 def test_build_stage3_workflow_returns_dict():
     result = build_stage3_workflow("/tmp/test.mp4")
     assert isinstance(result, dict)
@@ -283,7 +305,7 @@ def test_build_stage3_workflow_has_two_ksamplers():
 
 def test_build_stage3_workflow_vfx_ksampler_uses_config_cfg():
     config = Stage3Config(vfx_cfg=9.5)
-    result = build_stage3_workflow("/tmp/test.mp4", config)
+    result = build_stage3_workflow("/tmp/test.mp4", config=config)
     ks_nodes = [n for n in result.values() if n["class_type"] == "KSampler"]
     cfgs = [n["inputs"]["cfg"] for n in ks_nodes]
     assert 9.5 in cfgs

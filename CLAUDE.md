@@ -4,7 +4,7 @@
 
 Python 3.13 ComfyUI API wrapper for anime video generation. Builds ComfyUI workflow JSON in Python and submits it to a running ComfyUI server. The pipeline is implemented incrementally — one stage per plan, each stage producing testable software independently.
 
-**Current state:** Stage 1 (Multi-Modal Motion Extraction) and Stage 2 (Temporal Latent Engine) are complete with 167 passing tests.
+**Current state:** Stage 1 (Multi-Modal Motion Extraction), Stage 2 (Temporal Latent Engine), and Stage 3 (VFX Inpainting) are complete with 217+ passing tests.
 
 ## Key Architecture Decisions
 
@@ -14,24 +14,26 @@ Python 3.13 ComfyUI API wrapper for anime video generation. Builds ComfyUI workf
 
 **Stages return result dataclasses:** `OrganicBusResult`, `RigidBusResult`, `TemporalUnificationResult`, `ModelLoadingBusResult`, `IdentityBusResult`, `ConditioningBusResult`, `LatentBusResult`, `GenerationBusResult` — downstream stages wire specific outputs by field name, not positional tuple indices.
 
-**All config is pydantic:** `HardwareConfig`, `Stage1Config`, `Stage2Config`, `PipelineConfig`. Defaults match the TDD document exactly (16GB envelope, 32-frame context window, 8-frame overlap, 24fps).
+**All config is pydantic:** `HardwareConfig`, `Stage1Config`, `Stage2Config`, `Stage3Config`, `PipelineConfig`. Defaults match the TDD document exactly (16GB envelope, 32-frame context window, 8-frame overlap, 24fps).
 
 ## File Map
 
 ```
 src/anime_vid_generator/
-├── config.py                     # HardwareConfig, Stage1Config, Stage2Config, PipelineConfig
+├── config.py                     # HardwareConfig, Stage1Config, Stage2Config, Stage3Config, PipelineConfig
 ├── client.py                     # ComfyUIClient — HTTP + WebSocket
-├── cli.py                        # Typer CLI (kinetic stage1, kinetic stage2)
+├── cli.py                        # Typer CLI (kinetic stage1, kinetic stage2, kinetic stage3)
 └── workflow/
-    ├── nodes.py                  # WorkflowNode, NodeRef, factory functions (Stage 1 + Stage 2)
+    ├── nodes.py                  # WorkflowNode, NodeRef, factory functions (Stage 1 + Stage 2 + Stage 3)
     ├── builder.py                # WorkflowBuilder
     └── stages/
         ├── stage1_motion.py      # build_organic_bus, build_rigid_bus,
         │                         # build_temporal_unification, build_stage1_workflow
-        └── stage2_generation.py  # build_model_loading_bus, build_conditioning_bus,
-                                  # build_identity_bus, build_latent_bus,
-                                  # build_generation_bus, build_stage2_workflow
+        ├── stage2_generation.py  # build_model_loading_bus, build_conditioning_bus,
+        │                         # build_identity_bus, build_latent_bus,
+        │                         # build_generation_bus, build_stage2_workflow
+        └── stage3_vfx.py         # build_tracking_bus, build_vfx_inpainting_bus,
+                                  # build_stage3_workflow
 tests/
 ├── conftest.py                   # builder fixture
 ├── test_config.py
@@ -42,20 +44,23 @@ tests/
     ├── test_builder.py
     └── stages/
         ├── test_stage1_motion.py
-        └── test_stage2_generation.py
+        ├── test_stage2_generation.py
+        └── test_stage3_vfx.py
 ```
 
 ## Development Commands
 
 ```bash
 uv sync --dev          # install all deps including dev
-uv run pytest          # run all 167 tests (no ComfyUI needed)
+uv run pytest          # run all 217+ tests (no ComfyUI needed)
 uv run pytest -v       # verbose output
 uv run kinetic stage1 <video> --dry-run                      # preview Stage 1 workflow JSON
 uv run kinetic stage1 <video>                                # submit Stage 1 to ComfyUI at localhost:8188
 uv run kinetic stage2 <video> --dry-run                      # preview Stage 2 workflow JSON
 uv run kinetic stage2 <video> --reference-image <face.png>   # submit Stage 2 with identity reference
 uv run kinetic stage2 <video> --vae-encode --denoise 0.75    # vid2vid mode at 75% denoise
+uv run kinetic stage3 <video> --dry-run                      # preview Stage 3 workflow JSON
+uv run kinetic stage3 <video> --emitter-prompt "sword tip"   # track emitter and run VFX
 ```
 
 ## Testing Rules
@@ -117,6 +122,15 @@ The `build()` output matches the ComfyUI `/prompt` API directly:
 | `Flow_Guided_Noise_Injection`| Skew noise along Unimatch motion vectors   |
 | `FreeLong`                   | Spectral blending for cross-chunk stability |
 | `KSampler`                   | Main diffusion sampling (tiled)            |
+
+## Stage 3 Node Reference
+
+| Node class_type        | Role                                              |
+| ---------------------- | ------------------------------------------------- |
+| `SAM3_VideoSegmenter`  | Track effect emitter via Segment Anything Video   |
+| `Mask_Dilate`          | Expand tracked mask driven by optical flow vectors|
+| `VAEEncodeForInpaint`  | Masked VAE encode for inpainting latent           |
+| `LoRA_Loader`          | Inject VFX LoRA (e.g., Ufotable_Fire_Trails)      |
 
 ## Plans Location
 
