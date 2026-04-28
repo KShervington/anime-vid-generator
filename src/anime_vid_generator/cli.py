@@ -93,6 +93,11 @@ def stage3(
         "--vfx-prompt",
         help="Positive prompt for VFX inpainting pass",
     ),
+    vfx_negative_prompt: str = typer.Option(
+        "blurry, low quality, photorealistic",
+        "--vfx-negative-prompt",
+        help="Negative prompt for VFX inpainting pass",
+    ),
     seed: int = typer.Option(0, "--seed", help="Sampler seed"),
     comfyui_url: str = typer.Option("http://127.0.0.1:8188", help="ComfyUI server URL"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print workflow JSON without submitting"),
@@ -106,9 +111,10 @@ def stage3(
         vfx_lora_path=vfx_lora,
         vfx_cfg=vfx_cfg,
         vfx_positive_prompt=vfx_prompt,
+        vfx_negative_prompt=vfx_negative_prompt,
         seed=seed,
     )
-    workflow = build_stage3_workflow(str(video.resolve()), config)
+    workflow = build_stage3_workflow(str(video.resolve()), config=config)
 
     if dry_run:
         console.print_json(json.dumps(workflow))

@@ -164,6 +164,17 @@ def test_stage3_dry_run_custom_vfx_cfg(tmp_path):
     assert 9.5 in cfgs
 
 
+def test_stage3_dry_run_custom_vfx_prompt(tmp_path):
+    video = tmp_path / "test.mp4"
+    video.write_bytes(b"fake")
+    result = runner.invoke(app, ["stage3", str(video), "--vfx-prompt", "lightning vfx", "--dry-run"])
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    clip_nodes = [n for n in parsed.values() if n["class_type"] == "CLIPTextEncode"]
+    texts = [n["inputs"]["text"] for n in clip_nodes]
+    assert "lightning vfx" in texts
+
+
 def test_stage3_nonexistent_video_exits_nonzero():
     result = runner.invoke(app, ["stage3", "/nonexistent/video.mp4"])
     assert result.exit_code != 0
